@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Map Project</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
+    <script src="../js/leaflet.js"></script>
+
+    <style>
+      #map { width: 90%; height: 80vh;}
+    </style>
+
+</head>
+<body>
+    <div id="map"></div>
+
+    <button id="save-point-btn" onclick="savePoint()">Save Point</button>
+
+    <ul id="saved-points-list">
+        <!-- Saved points will be here-->
+    </ul>
+
+    <button id="download-btn" onclick="downloadSavedPoints()">Download</button>
+
+
+    <script src="../js/leaflet.js"></script>
+
+
+    <script src="frontend.js"></script>
+    
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.16.9/xlsx.full.min.js"></script>
+
+
+    <script>
+        var map = L.map('map').setView([41.015, 28.979], 10);
+    
+        var osm=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    });
+        osm.addTo(map);
+
+
+    document.addEventListener('DOMContentLoaded', function() {
+            // Your JavaScript code to fetch data
+           displaySavedPoints();
+        });
+
+
+    
+    async function savePoint(){
+        const center = map.getCenter();
+        const coordinates = {
+            lat: center.lat,
+            lng: center.lng
+        };
+    
+        try {
+            const response = await fetch('http://localhost:3001/save-point', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(coordinates)
+            });
+            if (response.ok) {
+                console.log('Point saved.');
+                displaySavedPoints();
+            } else {
+                console.error('Failed to save point.');
+            }
+        } catch (error) {
+            console.error('Error saving point:', error);
+        }
+    }
+
+    function addSavedPointsList() {
+    const savedPointsListContainer = document.createElement('ul');
+    savedPointsListContainer.id = 'saved-points-list';
+    document.body.appendChild(savedPointsListContainer);
+    return savedPointsListContainer; 
+    }   
+
+    const savedPointsList = addSavedPointsList();
+
+    async function displaySavedPoints() {
+        savedPointsList.innerHTML = '';
+    const points = await fetchSavedPoints();
+    
+
+    points.forEach(point => {
+        const listItem = document.createElement('li');
+        listItem.textContent = `Lat: ${point.lat}, Lng: ${point.lng}, Date: ${new Date(point.datetime).toLocaleString()}`;
+        listItem.dataset.id = point.id;
+
+        const deleteButton = document.createElement('button');
+        deleteButton.textContent = 'Delete';
+        deleteButton.classList.add('deleteButton');
+        listItem.appendChild(deleteButton);
+
+        deleteButton.addEventListener('click', function() {
+            this.parentNode.remove();
+            deleteSavedPoint(point.id);
+        });
+
+        listItem.addEventListener('click', function () {
+            const selectedPointId = parseInt(this.dataset.id); 
+            const selectedPoint = points.find(point => point.id === selectedPointId);
+
+            if(previousMarker)
+            {
+                map.removeLayer(previousMarker);
+            }
+
+            previousMarker = L.marker([point.lat,point.lng]).addTo(map);
+        });
+        savedPointsList.appendChild(listItem);
+    });
+}
+
+let previousMarker = null;
+
+
+    async function fetchSavedPoints() {
+        try {
+            const response = await fetch('http://localhost:3001/points/points');
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error('Error fetching points:', error);
+            return [];
+        }
+    }
+
+    async function downloadSavedPoints(){
+
+        const points = await fetchSavedPoints();
+
+        const workbook = XLSX.utils.book_new();
+      const sheet = XLSX.utils.json_to_sheet(points);
+      XLSX.utils.book_append_sheet(workbook, sheet, 'Data');
+
+      const excelData = XLSX.write(workbook, { bookType: 'xlsx', type: 'binary' });
+
+      const blob = new Blob([s2ab(excelData)], { type: 'application/octet-stream' });
+
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'data.xlsx';
+
+      document.body.appendChild(link);
+      link.click();
+
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+
+    function s2ab(s) {
+      const buf = new ArrayBuffer(s.length);
+      const view = new Uint8Array(buf);
+      for (let i = 0; i < s.length; i++) {
+        view[i] = s.charCodeAt(i) & 0xFF;
+      }
+      return buf;
+    }
+
+    async function deleteSavedPoint(selectedPointId){
+        try {
+            const response = await fetch("http://localhost:3001/delete-point/"+selectedPointId, {
+            method: 'DELETE'
+            });
+            if (response.ok) {
+                console.log('Point deleted successfully.');
+                displaySavedPoints();
+            } else {
+                console.error('Failed to delete point.');
+            }
+        } catch (error) {
+            console.error('Error deleting point:', error);
+        }
+    }
+
+    </script>
+</body>
+
+</html>
